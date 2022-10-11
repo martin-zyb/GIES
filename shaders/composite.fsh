@@ -1,29 +1,30 @@
 #version 120
 
-#define SHADOW_MAP_BIAS 0.8 
+#define SHADOW_MAP_BIAS 0.8
 
-uniform sampler2D gcolor;
+const int RG16 = 0;
+const int gnormalFormat = RG16;
+const int shadowMapResolution = 2048;
+const float sunPathRotation = -25.0;
+const bool shadowHardwareFiltering = true;
+
+uniform float far;
+uniform vec3 sunPosition;
 uniform mat4 gbufferProjectionInverse;
 uniform mat4 gbufferModelViewInverse;
 uniform mat4 shadowModelView;
 uniform mat4 shadowProjection;
-uniform sampler2DShadow shadow;
-uniform sampler2D depthtex0;
-uniform float far;
+uniform sampler2D gcolor;
 uniform sampler2D gnormal;
-uniform vec3 sunPosition;
+uniform sampler2D depthtex0;
+uniform sampler2DShadow shadow;
 
-varying vec4 texcoord;
 varying float extShadow;
 varying vec3 lightPosition;
+varying vec4 texcoord;
 
-const int RG16 = 0;
-const int gnormalFormat = RG16;
-const bool shadowHardwareFiltering = true;
-
-const int shadowMapResolution = 2048;
-
-vec3 normalDecode(vec2 enc) {
+vec3 normalDecode(vec2 enc)
+{
     vec4 nn = vec4(2.0 * enc - 1.0, 1.0, -1.0);
     float l = dot(nn.xyz,-nn.xyw);
     nn.z = l;
@@ -45,7 +46,7 @@ float shadowMapping(vec4 worldPosition, float dist, vec3 normal, float alpha)
     }
     else
     {
-        vec4 worldPosition = gbufferModelViewInverse * (viewPosition + vec4(normal * 0.05 * sqrt(abs(viewPosition.z)), 0.0));
+        vec4 shadowposition = shadowModelView * worldPosition;
         shadowposition = shadowProjection * shadowposition;
         float edgeX = abs(shadowposition.x) - 0.9;
         float edgeY = abs(shadowposition.y) - 0.9;
@@ -59,25 +60,27 @@ float shadowMapping(vec4 worldPosition, float dist, vec3 normal, float alpha)
         {
             shade = max(shade, 1.0 - (angle - 0.1) * 10.0);
         }
+	    shade -= max(0.0, edgeX * 10.0);
+		shade -= max(0.0, edgeY * 10.0);
     }
     shade -= clamp((dist - 0.7) * 5.0, 0.0, 1.0);
     shade = clamp(shade, 0.0, 1.0);
-    shade -= max(0.0, edgeX * 10.0);
-    shade -= max(0.0, edgeY * 10.0);
     return max(shade, extShadow);
 }
 
 void main()
 {
-/* DRAWBUFFERS:0 */
     vec4 color = texture2D(gcolor, texcoord.st);
     vec3 normal = normalDecode(texture2D(gnormal, texcoord.st).rg);
     float depth = texture2D(depthtex0, texcoord.st).x;
     vec4 viewPosition = gbufferProjectionInverse * vec4(texcoord.s * 2.0 - 1.0, texcoord.t * 2.0 -1.0, 2.0 * depth - 1.0, 1.0f);
     viewPosition /= viewPosition.w;
-    vec4 worldPosition = gbufferModelViewInverse * viewPosition;
+    vec4 worldPosition = gbufferModelViewInverse * (viewPosition + vec4(normal * 0.05 * sqrt(abs(viewPosition.z)), 0.0));
     float dist = length(worldPosition.xyz) / far;
+    
     float shade = shadowMapping(worldPosition, dist, normal, color.a);
     color.rgb *= 1.0 - shade * 0.5;
+    
+/* DRAWBUFFERS:0 */
     gl_FragData[0] = color;
 }

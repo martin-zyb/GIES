@@ -13,7 +13,8 @@ varying float extShadow;
 #define FADE_START 500
 #define FADE_END 250
 
-void main() {
+void main()
+{
     gl_Position = ftransform();
     texcoord = gl_MultiTexCoord0;
     if(worldTime >= SUNRISE - FADE_START && worldTime <= SUNRISE + FADE_START)
