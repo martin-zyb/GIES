@@ -2,7 +2,9 @@
 
 #define SHADOW_MAP_BIAS 0.8
 
+const int RGB8 = 0;
 const int RG16 = 0;
+const int colortex1Format = RGB8;
 const int gnormalFormat = RG16;
 const int shadowMapResolution = 2048;
 const float sunPathRotation = -25.0;
@@ -80,7 +82,9 @@ void main()
     
     float shade = shadowMapping(worldPosition, dist, normal, color.a);
     color.rgb *= 1.0 - shade * 0.5;
-    
-/* DRAWBUFFERS:0 */
+    float brightness = dot(color.rgb, vec3(0.2126, 0.7152, 0.0722));
+    vec3 highlight = color.rgb * max(brightness - 0.25, 0.0);
+/* DRAWBUFFERS:01 */
     gl_FragData[0] = color;
+    gl_FragData[1] = vec4(highlight, 1.0);
 }
