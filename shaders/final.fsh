@@ -45,7 +45,7 @@ varying vec2 lf4Pos;
 
 #define DOF_FADE_RANGE 0.15
 #define DOF_CLEAR_RADIUS 0.2
-#define DOF_NEARVIEWBLUR            //TODO : Remove or comment out "DOF_ NEARVIEWBLUR" will turn off close-up blur.
+// #define DOF_NEARVIEWBLUR            //TODO : Remove or comment out "DOF_ NEARVIEWBLUR" will turn off close-up blur.
 
 vec3 lensFlare(vec3 color, vec2 uv) {
     if(sunVisibility <= 0.0)
