@@ -21,6 +21,11 @@ uniform float viewWidth;
 uniform float viewHeight;
 uniform float aspectRatio;
 uniform float centerDepthSmooth;
+uniform vec3 cameraPosition;
+uniform vec3 previousCameraPosition;
+uniform mat4 gbufferModelViewInverse;
+uniform mat4 gbufferPreviousModelView;
+uniform mat4 gbufferPreviousProjection;
 
 varying vec4 texcoord;
 varying float sunVisibility;
@@ -46,6 +51,11 @@ varying vec2 lf4Pos;
 #define DOF_NEARVIEWBLUR            //TODO  :  Remove or comment out "DOF_ NEARVIEWBLUR" will turn off close-up blur.
 #define DOF_FADE_RANGE 0.15
 #define DOF_CLEAR_RADIUS 0.2
+
+#define MOTIONBLUR_THRESHOLD 0.01
+#define MOTIONBLUR_MAX 0.18
+#define MOTIONBLUR_STRENGTH 0.45
+#define MOTIONBLUR_SAMPLE 4
 
 vec3 lensFlare(vec3 color, vec2 uv) {
     if(sunVisibility <= 0.0)
@@ -93,6 +103,34 @@ vec3 dof(vec3 color, vec2 uv, float depth) {
     return mix(color, blurColor, fade);
 }
 
+vec3 motionBlur(vec3 color, vec2 uv, vec4 viewPosition)
+{
+    vec4 worldPosition = gbufferModelViewInverse * viewPosition + vec4(cameraPosition, 0.0);
+    vec4 prevClipPosition = gbufferPreviousProjection * gbufferPreviousModelView * (worldPosition - vec4(previousCameraPosition, 0.0));
+    vec4 prevNdcPosition = prevClipPosition / prevClipPosition.w;
+    vec2 prevUv = (prevNdcPosition * 0.5 + 0.5).st;
+    vec2 delta = uv - prevUv;
+    float dist = length(delta);
+    if(dist > MOTIONBLUR_THRESHOLD)
+    {
+        delta = normalize(delta);
+        dist = min(dist, MOTIONBLUR_MAX) - MOTIONBLUR_THRESHOLD;
+        dist *= MOTIONBLUR_STRENGTH;
+        delta *= dist / float(MOTIONBLUR_SAMPLE);
+        int sampleNum = 1;
+        for(int i = 0; i < MOTIONBLUR_SAMPLE; i++)
+        {
+            uv += delta;
+            if(uv.s <= 0.0 || uv.s >= 1.0 || uv.t <= 0.0 || uv.t >= 1.0)
+                break;
+            color += texture2D(colortex1, uv).rgb;
+            sampleNum++;
+        }
+        color /= float(sampleNum);
+    }
+    return color;
+}
+
 void main()
 {
     vec3 attrs =  texture2D(colortex4, texcoord.st).rgb;
@@ -104,5 +142,6 @@ void main()
     color = vignette(color);
     color = lensFlare(color, texcoord.st);
     color = dof(color, texcoord.st, depth);
+    color = motionBlur(color, texcoord.st, viewPosition);
     gl_FragColor = vec4(color, 1.0);
 }
