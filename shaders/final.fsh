@@ -8,6 +8,8 @@ const vec4 LF2COLOR = vec4(0.42, 0.0, 1.0, 0.1);
 const vec4 LF3COLOR = vec4(0.0, 1.0, 0.0, 0.1);
 const vec4 LF4COLOR = vec4(1.0, 0.0, 0.0, 0.1);
 
+const float centerDepthHalflife = 0.5;
+
 uniform sampler2D colortex1;
 uniform mat4 gbufferProjectionInverse;
 uniform sampler2D colortex4;
@@ -18,6 +20,7 @@ uniform mat4 gbufferProjection;
 uniform float viewWidth;
 uniform float viewHeight;
 uniform float aspectRatio;
+uniform float centerDepthSmooth;
 
 varying vec4 texcoord;
 varying float sunVisibility;
@@ -40,6 +43,10 @@ varying vec2 lf4Pos;
 #define LF3SIZE 0.25
 #define LF4SIZE 0.25
 
+#define DOF_FADE_RANGE 0.15
+#define DOF_CLEAR_RADIUS 0.2
+#define DOF_NEARVIEWBLUR            //TODO : Remove or comment out "DOF_ NEARVIEWBLUR" will turn off close-up blur.
+
 vec3 lensFlare(vec3 color, vec2 uv) {
     if(sunVisibility <= 0.0)
         return color;
@@ -58,6 +65,34 @@ vec3 vignette(vec3 color)
     return color.rgb * (1.0 - dist);
 }
 
+vec3 dof(vec3 color, vec2 uv, float depth) {
+    float linearFragDepth = linearizeDepth(depth);
+    float linearCenterDepth = linearizeDepth(centerDepthSmooth);
+    float delta = linearFragDepth - linearCenterDepth;
+    #ifdef DOF_NEARVIEWBLUR
+    float fade = smoothstep(0.0, DOF_FADE_RANGE, clamp(abs(delta) - DOF_CLEAR_RADIUS, 0.0, DOF_FADE_RANGE));
+    #else
+    float fade = smoothstep(0.0, DOF_FADE_RANGE, clamp(delta - DOF_CLEAR_RADIUS, 0.0, DOF_FADE_RANGE));
+    #endif
+    if(fade < 0.001)
+        return color;
+    vec2 offset = vec2(1.33333 * aspectRatio / viewWidth, 1.33333 / viewHeight);
+    vec3 blurColor = vec3(0.0);
+    //0.12456 0.10381 0.12456
+    //0.10380 0.08651 0.10380
+    //0.12456 0.10381 0.12456
+    blurColor += texture2D(colortex1, uv + offset * vec2(-1.0, -1.0)).rgb * 0.12456;
+    blurColor += texture2D(colortex1, uv + offset * vec2(0.0, -1.0)).rgb * 0.10381;
+    blurColor += texture2D(colortex1, uv + offset * vec2(1.0, -1.0)).rgb * 0.12456;
+    blurColor += texture2D(colortex1, uv + offset * vec2(-1.0, 0.0)).rgb * 0.10381;
+    blurColor += texture2D(colortex1, uv).rgb * 0.08651;
+    blurColor += texture2D(colortex1, uv + offset * vec2(1.0, 0.0)).rgb * 0.10381;
+    blurColor += texture2D(colortex1, uv + offset * vec2(-1.0, 1.0)).rgb * 0.12456;
+    blurColor += texture2D(colortex1, uv + offset * vec2(0.0, 1.0)).rgb * 0.10381;
+    blurColor += texture2D(colortex1, uv + offset * vec2(1.0, 1.0)).rgb * 0.12456;
+    return mix(color, blurColor, fade);
+}
+
 void main()
 {
     vec3 attrs =  texture2D(colortex4, texcoord.st).rgb;
@@ -68,5 +103,6 @@ void main()
     vec3 color =  texture2D(colortex1, texcoord.st).rgb;
     color = vignette(color);
     color = lensFlare(color, texcoord.st);
+    color = dof(color, texcoord.st, depth);
     gl_FragColor = vec4(color, 1.0);
 }
